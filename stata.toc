@@ -1,0 +1,4 @@
+v 1.0
+d AIDO: AI Assistant for Stata
+d Alex Svoboda
+p aido

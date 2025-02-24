@@ -1,0 +1,11 @@
+v 1.0
+d aido. AI Assistant for Stata
+d
+d Author: Alex Svoboda
+d
+d Requires: Python 3.8+, aiohttp library
+d
+d Distribution-Date: 20250224
+d
+f aido.ado
+f aido.sthlp
