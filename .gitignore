@@ -1,0 +1,26 @@
+# Configuration files containing API keys
+*.config
+aido.config
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Testing and temporary files
+testingapi.py
+regression_state.txt
+patterns.txt
+*_temp.do
+*.temp
+
+# Stata temp files
+*.dta
+*.stswp
+
+# IDE and system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

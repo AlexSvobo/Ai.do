@@ -1,0 +1,30 @@
+VERSION 16.0
+POSITION . . 500 450
+
+DIALOG aido, label("Ai.do Assistant")
+BEGIN
+    /* Query Input Section */
+    TEXT tx_query 10 10 200 ., label("Enter your query:")
+    EDIT ed_query 10 30 480 30, error(Text Box)
+END
+
+OK ok_btn, label("OK")
+CANCEL cancel_btn, label("Cancel")
+SUBMIT submit_btn, label("Submit")
+HELP help_btn, view("help aido")
+RESET reset_btn, label("Reset")
+COPY copy_btn
+
+PROGRAM command
+BEGIN
+    put `"aido ""'
+    require aido.ed_query
+    put aido.ed_query
+    put `"""'
+END
+
+PROGRAM submit_action
+BEGIN
+    /* When the user clicks the Submit button, call our main command program */
+    call command
+END
