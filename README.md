@@ -14,8 +14,8 @@ An AI-powered assistant for Stata.
 - Stata 16.0 or later
 - Python 3.8 or later (we'll help you install it)
 - API key from one of these providers:
-  - [Hugging Face (recommended)](https://huggingface.co/settings/tokens)
-  - [Google Gemini](https://makersuite.google.com/app/apikey)
+  - [Google Gemini (recommended)](https://makersuite.google.com/app/apikey)
+  - [Hugging Face](https://huggingface.co/settings/tokens)
 
 ## Installation
 
