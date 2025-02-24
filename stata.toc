@@ -1,4 +1,20 @@
 v 1.0
-d AIDO: AI Assistant for Stata
-d Alex Svoboda
+d AI.do - AI Assistant for Stata
+d
+d AI.do (aido command) provides an AI-powered assistant for Stata, helping with
+d data analysis, visualization, and statistical programming through natural
+d language queries.
+d
+d Requires: Stata 16.0+
+d          Python 3.8+
+d          aiohttp Python library >= 3.8.0
+d
+d Additional Installation Required:
+d 1. Python module files from: https://github.com/alexsvobo/Ai.do
+d
+d Author: Alex Svoboda
+d Support: https://github.com/alexsvobo/Ai.do
+d
+d Distribution-Date: 20250224
+d
 p aido

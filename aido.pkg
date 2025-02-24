@@ -1,11 +1,28 @@
 v 1.0
-d aido. AI Assistant for Stata
+d aido. AI.do - AI Assistant for Stata - A bridge between Stata and Large Language Models
 d
 d Author: Alex Svoboda
+d Support: https://github.com/alexsvobo/Ai.do/issues
 d
-d Requires: Python 3.8+, aiohttp library
+d Requires: Stata 16.0+
+d         Python 3.8+
+d         aiohttp >= 3.8.0
+d
+d Additional Requirements:
+d - API key from either:
+d   * Google Gemini (recommended)
+d   * Hugging Face
+d
+d Additional Installation Required:
+d 1. Python module files from: https://github.com/alexsvobo/Ai.do
+d 2. Run in terminal: pip install aiohttp>=3.8.0
+d
+d After installation, configure API key:
+d . aido_config, provider(gemini) apikey("YOUR-KEY")
 d
 d Distribution-Date: 20250224
 d
 f aido.ado
+f aido_config.ado
 f aido.sthlp
+f aido.dlg
