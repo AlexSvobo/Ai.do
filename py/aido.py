@@ -1146,47 +1146,74 @@ class EstimationResults:
     @staticmethod
     def get_bayesian_results() -> Dict[str, Any]:
         """Get Bayesian estimation results after bayes commands"""
-        from sfi import Scalar, Matrix, Macro, Data
+        # Fixed import statement to ensure Data is properly imported
+        from sfi import Scalar, Matrix, Macro
+        import sfi
         
         results = {}
         
-        # Check if we've run a Bayesian command - more comprehensive check
         try:
+            # First check if we have a Bayesian model using multiple methods
             cmd = Macro.getGlobal("e(cmd)")
             cmdline = Macro.getGlobal("e(cmdline)")
+            prefix = Macro.getGlobal("e(prefix)")
             
-            # Multiple detection methods for Bayesian commands
+            # Check for Bayesian commands in multiple ways
             is_bayes = (cmd and "bayes" in cmd.lower()) or \
-                    (cmdline and "bayes" in cmdline.lower())
+                    (cmdline and "bayes" in cmdline.lower()) or \
+                    (prefix and "bayes" in prefix.lower())
             
-            # Alternative detection method
+            # Try to directly check if specific Bayesian markers exist
             if not is_bayes:
-                # Try to detect specific Bayesian output markers
-                try:
-                    val = Scalar.getValue("e(mcmcsize)")
-                    if val is not None:
-                        is_bayes = True
-                except:
-                    pass
+                for marker in ["e(mcmcsize)", "e(dic)", "e(arate)"]:
+                    try:
+                        val = Scalar.getValue(marker)
+                        if val is not None:
+                            is_bayes = True
+                            break
+                    except:
+                        continue
             
             if is_bayes:
-                # First ensure we capture all return values
-                Data.execCommand("qui _return list, all", False)
+                # Get all Bayesian scalars based on what we saw in the eret list output
+                bayes_scalars = [
+                    # MCMC parameters
+                    "mcmcsize", "burnin", "mcmciter", "thinning", "nchains",
+                    
+                    # Convergence diagnostics
+                    "eff_avg", "eff_min", "eff_max", "arate", 
+                    
+                    # Model criteria
+                    "dic", "lml_lm", "clevel",
+                    
+                    # Prior specifications
+                    "priorsigma", "priorshape", "priorscale",
+                    
+                    # Technical parameters
+                    "blocksize", "block1_scale", "block2_scale",
+                    "block1_tarate", "block2_tarate",
+                    "adapt_tolerance", "adapt_alpha", "adapt_beta"
+                ]
                 
-                # Get all potential MCMC diagnostics
-                for stat in ["mcmcsize", "burnin", "mcse_med", "ess_med", 
-                            "efficiency", "dic", "log_lik", "gelman_rubin",
-                            # Additional diagnostics
-                            "n_chains", "n_iter", "n_warmup", "acceptance_rate"]:
+                for stat in bayes_scalars:
                     try:
                         val = Scalar.getValue(f"e({stat})")
                         if val is not None:
                             results[f"e({stat})"] = val
                     except:
                         pass
-                        
-                # Get Bayesian matrices with better error handling
-                bayes_matrices = ["geweke", "mcerror", "ess", "ac", "cusum"]
+                
+                # Get all critical Bayesian matrices - including key posterior statistics
+                bayes_matrices = [
+                    "mean",     # Posterior means
+                    "sd",       # Posterior standard deviations
+                    "mcse",     # Monte Carlo standard errors
+                    "median",   # Posterior medians
+                    "cri",      # Credible intervals
+                    "ess",      # Effective sample sizes
+                    "Cov",      # Posterior covariance
+                    "init"      # Initial values
+                ]
                 
                 for m in bayes_matrices:
                     try:
@@ -1195,28 +1222,40 @@ class EstimationResults:
                             # Store dimensions
                             results[f"e({m})_dim"] = f"{mat.shape[0]}x{mat.shape[1]}"
                             
-                            # For smaller matrices, include contents
-                            if mat.shape[0] * mat.shape[1] <= 100:
-                                matrix_vals = []
-                                for i in range(min(mat.shape[0], 10)):  # First 10 rows max
-                                    row = []
-                                    for j in range(min(mat.shape[1], 10)):  # First 10 cols max
-                                        try:
-                                            val = mat[i][j]
-                                            if val is not None:
-                                                row.append(f"{val:.6g}")
-                                            else:
-                                                row.append("null")
-                                        except:
-                                            row.append("error")
-                                    matrix_vals.append("[" + ",".join(row) + "]")
-                                
-                                results[f"e({m})_values"] = "[" + ",".join(matrix_vals) + "]"
-                    except:
+                            # Get parameter names if available
+                            try:
+                                col_names = Matrix.getColNames(f"e({m})")
+                                if col_names:
+                                    results[f"e({m})_colnames"] = col_names
+                            except:
+                                pass
+                            
+                            # Store matrix values
+                            matrix_vals = []
+                            for i in range(mat.shape[0]):
+                                row = []
+                                for j in range(min(mat.shape[1], 15)):  # Limit columns if very wide
+                                    try:
+                                        val = mat[i][j]
+                                        if val is not None:
+                                            row.append(f"{val:.6g}")
+                                        else:
+                                            row.append("null")
+                                    except:
+                                        row.append("error")
+                                matrix_vals.append("[" + ", ".join(row) + "]")
+                            
+                            results[f"e({m})_values"] = "[" + ", ".join(matrix_vals) + "]"
+                    except Exception as e:
                         continue
                 
-                # Capture Bayesian-related macros
-                bayes_macros = ["prior", "chains", "aexog", "randomize", "seed", "saving"]
+                # Capture Bayesian-specific macros without using Data.execCommand
+                bayes_macros = [
+                    "prefix", "method", "prior1", "prior2", "priorparams1", "priorparams2",
+                    "likelihood", "block1_names", "block2_names", "parnames", "scparams",
+                    "postvars", "pareqmap"
+                ]
+                
                 for m in bayes_macros:
                     try:
                         val = Macro.getGlobal(f"e({m})")
@@ -1224,10 +1263,28 @@ class EstimationResults:
                             results[f"e({m})"] = val
                     except:
                         continue
+                    
+                # If we have parameter names, format posterior summary as a table
+                try:
+                    param_names = Macro.getGlobal("e(parnames)")
+                    mean_matrix = Matrix.get("e(mean)")
+                    sd_matrix = Matrix.get("e(sd)")
+                    
+                    if param_names and mean_matrix is not None and sd_matrix is not None:
+                        param_list = param_names.split()
+                        results["posterior_table"] = "Parameter | Mean | Std. Dev.\n" + "-" * 40 + "\n"
+                        
+                        for i, param in enumerate(param_list):
+                            if i < mean_matrix.shape[1] and i < sd_matrix.shape[1]:
+                                mean_val = mean_matrix[0][i]
+                                sd_val = sd_matrix[0][i]
+                                results["posterior_table"] += f"{param} | {mean_val:.6g} | {sd_val:.6g}\n"
+                except:
+                    pass
         except Exception as e:
             import logging
-            logging = logging.getLogger(__name__)
-            logging.warning(f"Error getting Bayesian results: {e}")
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error getting Bayesian results: {str(e)}")
         
         return results
 
