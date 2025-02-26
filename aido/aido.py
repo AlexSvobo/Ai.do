@@ -522,7 +522,21 @@ class EstimationResults:
             output.append("\n[TEST RESULTS]")
             for name, value in test_results.items():
                 output.append(f"{name}: {value:.8g}")  # More decimal places
-        
+
+        # Add this section to the get_current_results() method
+        # Add ALL available results using sfi
+        all_avail_results = EstimationResults.get_all_available_results()
+        if all_avail_results:
+            output.append("\n[COMPLETE STATA RESULTS]")
+            output.append("All Available Results from Stata:")
+            for name in sorted(all_avail_results.keys()):
+                if name not in results and name not in scalars and name not in r_results:
+                    value = all_avail_results[name]
+                    if isinstance(value, (int, float)):
+                        output.append(f"{name}: {value:.8g}")
+                    else:
+                        output.append(f"{name}: {value}")
+
         return "\n".join(output)
 
     @staticmethod
@@ -671,123 +685,125 @@ class EstimationResults:
                 continue
         return results
 
-@staticmethod
-def get_test_results() -> Dict[str, Any]:
-    """Get ALL statistical test results without missing anything"""
-    from sfi import Scalar, Matrix, Data
-    
-    # Expanded test result scalars - covers virtually everything
-    test_scalars = [
-        # Basic test statistics
-        'r(chi2)', 'r(p)', 'r(F)', 'r(df)', 'r(df_r)',
+    @staticmethod
+    def get_test_results() -> Dict[str, Any]:
+        """Get ALL statistical test results without missing anything"""
+        from sfi import Scalar, Matrix, Data
         
-        # Additional test metrics for ALL test types
-        'r(p_l)', 'r(p_u)', 'r(p_exact)',  # For exact tests
-        'r(t)', 'r(t_p)', 'r(se)', 'r(sd)',  # For t-tests
-        'r(z)', 'r(z_p)', 'r(level)',  # For z-tests
-        'r(N_1)', 'r(N_2)', 'r(N_pair)',  # Sample sizes
-        'r(mu_1)', 'r(mu_2)', 'r(mu_diff)',  # Group means
-        'r(rho)', 'r(corr)',  # Correlation tests
+        # Expanded test result scalars - covers virtually everything
+        test_scalars = [
+            # Basic test statistics
+            'r(chi2)', 'r(p)', 'r(F)', 'r(df)', 'r(df_r)',
+            
+            # Additional test metrics for ALL test types
+            'r(p_l)', 'r(p_u)', 'r(p_exact)',  # For exact tests
+            'r(t)', 'r(t_p)', 'r(se)', 'r(sd)',  # For t-tests
+            'r(z)', 'r(z_p)', 'r(level)',  # For z-tests
+            'r(N_1)', 'r(N_2)', 'r(N_pair)',  # Sample sizes
+            'r(mu_1)', 'r(mu_2)', 'r(mu_diff)',  # Group means
+            'r(rho)', 'r(corr)',  # Correlation tests
+            
+            # ANOVA specific
+            'r(mss)', 'r(rss)', 'r(tss)',
+            'r(r2)', 'r(r2_a)',
+            
+            # Additional test information
+            'r(k)', 'r(n)', 'r(sum_w)',
+            
+            # Regression diagnostics - used by estat commands
+            'r(bgodfrey)', 'r(durbinalt)', 'r(dwstat)',
+            'r(estat)', 'r(p_estat)', 'r(scalar)',
+            'r(w)', 'r(w_p)', 'r(h)', 'r(h_p)',
+            
+            # Prediction tests
+            'r(pr2)', 'r(F_f)', 'r(p_f)',
+            
+            # Test statistics with numbered variants
+            'r(df1)', 'r(df2)', 'r(stat1)', 'r(stat2)',
+            'r(p1)', 'r(p2)', 'r(se1)', 'r(se2)'
+        ]
         
-        # ANOVA specific
-        'r(mss)', 'r(rss)', 'r(tss)',
-        'r(r2)', 'r(r2_a)',
-        
-        # Additional test information
-        'r(k)', 'r(n)', 'r(sum_w)',
-        
-        # Regression diagnostics - used by estat commands
-        'r(bgodfrey)', 'r(durbinalt)', 'r(dwstat)',
-        'r(estat)', 'r(p_estat)', 'r(scalar)',
-        'r(w)', 'r(w_p)', 'r(h)', 'r(h_p)',
-        
-        # Prediction tests
-        'r(pr2)', 'r(F_f)', 'r(p_f)',
-        
-        # Test statistics with numbered variants
-        'r(df1)', 'r(df2)', 'r(stat1)', 'r(stat2)',
-        'r(p1)', 'r(p2)', 'r(se1)', 'r(se2)'
-    ]
-    
-    # ALSO check if we're after a test command by looking at command history
-    try:
-        # Try to get last command from Stata
-        last_cmd = Data.execCommand("di \"`c(cmdline)'\"", False)
-        if last_cmd and any(test_type in last_cmd.lower() for test_type in 
-                           ['test', 'estat', 'hausman', 'lrtest', 'ttest', 
-                            'pwcorr', 'correlate', 'tabulate']):
-            # After a test command, try displaying and capturing ALL test results
-            Data.execCommand("qui return list", False)
-    except:
-        pass
-
-    results = {}
-    
-    # Get specific scalar values
-    for s in test_scalars:
+        # ALSO check if we're after a test command by looking at command history
         try:
-            val = Scalar.getValue(s)
-            if val is not None:
-                results[s] = val
+            # Try to get last command from Stata
+            last_cmd = Data.execCommand("di \"`c(cmdline)'\"", False)
+            if last_cmd and any(test_type in last_cmd.lower() for test_type in 
+                               ['test', 'estat', 'hausman', 'lrtest', 'ttest', 
+                                'pwcorr', 'correlate', 'tabulate']):
+                # After a test command, try displaying and capturing ALL test results
+                Data.execCommand("qui return list", False)
         except:
-            continue
-    
-    # Try ALL possible numeric suffixes too (1-20)
-    for base in ['chi2_', 'F_', 'p_', 'stat_', 'df_', 'w_', 't_', 'z_']:
-        for i in range(1, 21):  # Try suffixes 1-20
+            pass
+
+        results = {}
+        
+        # Get specific scalar values
+        for s in test_scalars:
             try:
-                name = f"r({base}{i})"
-                val = Scalar.getValue(name)
+                val = Scalar.getValue(s)
                 if val is not None:
-                    results[name] = val
+                    results[s] = val
+            except:
+                continue
+        
+        # Try ALL possible numeric suffixes too (1-20)
+        for base in ['chi2_', 'F_', 'p_', 'stat_', 'df_', 'w_', 't_', 'z_']:
+            for i in range(1, 21):  # Try suffixes 1-20
+                try:
+                    name = f"r({base}{i})"
+                    val = Scalar.getValue(name)
+                    if val is not None:
+                        results[name] = val
+                except:
+                    continue
+
+        # Get test-specific matrices with FULL contents
+        test_matrices = [
+            'r(table)', 'r(chi2)', 'r(stats)', 'r(corr)',
+            'r(Sigma)', 'r(V)', 'r(S)', 'r(b)', 'r(se)'
+        ]
+        
+        for m in test_matrices:
+            try:
+                mat = Matrix.get(m)
+                if mat is not None:
+                    # Store dimensions
+                    results[f"{m}_dim"] = f"{mat.shape[0]}x{mat.shape[1]}"
+                    
+                    # Store contents regardless of size
+                    matrix_vals = []
+                    for i in range(min(mat.shape[0], 10)):  # First 10 rows max
+                        row = []
+                        for j in range(min(mat.shape[1], 10)):  # First 10 cols max
+                            try:
+                                val = mat[i][j]
+                                if val is not None:
+                                    row.append(f"{val:.6g}")
+                                else:
+                                    row.append("null")
+                            except:
+                                row.append("error")
+                        matrix_vals.append("[" + ",".join(row) + "]")
+                    
+                    results[f"{m}_values"] = "[" + ",".join(matrix_vals) + "]"
+                    
+                    # Try to get column names
+                    try:
+                        colnames = Matrix.getColNames(m)
+                        if colnames:
+                            results[f"{m}_colnames"] = colnames
+                    except:
+                        pass
             except:
                 continue
 
-    # Get test-specific matrices with FULL contents
-    test_matrices = [
-        'r(table)', 'r(chi2)', 'r(stats)', 'r(corr)',
-        'r(Sigma)', 'r(V)', 'r(S)', 'r(b)', 'r(se)'
-    ]
-    
-    for m in test_matrices:
-        try:
-            mat = Matrix.get(m)
-            if mat is not None:
-                # Store dimensions
-                results[f"{m}_dim"] = f"{mat.shape[0]}x{mat.shape[1]}"
-                
-                # Store contents regardless of size
-                matrix_vals = []
-                for i in range(min(mat.shape[0], 10)):  # First 10 rows max
-                    row = []
-                    for j in range(min(mat.shape[1], 10)):  # First 10 cols max
-                        try:
-                            val = mat[i][j]
-                            if val is not None:
-                                row.append(f"{val:.6g}")
-                            else:
-                                row.append("null")
-                        except:
-                            row.append("error")
-                    matrix_vals.append("[" + ",".join(row) + "]")
-                
-                results[f"{m}_values"] = "[" + ",".join(matrix_vals) + "]"
-                
-                # Try to get column names
-                try:
-                    colnames = Matrix.getColNames(m)
-                    if colnames:
-                        results[f"{m}_colnames"] = colnames
-                except:
-                    pass
-        except:
-            continue
-
-    return results
+        return results
 
     @staticmethod
     def get_command_history() -> List[str]:
         """Get Stata command history using SFI"""
+        from sfi import Macro, Data
+        
         try:
             history = []
             # First try to get the command line buffer size
@@ -806,10 +822,35 @@ def get_test_results() -> Dict[str, Any]:
                 except:
                     continue
                     
+            # If the above method fails, try a different approach - directly query Stata
+            if not history:
+                try:
+                    cmd_output = Data.execCommand("qui log using _templist, replace text", False)
+                    cmd_output = Data.execCommand("qui log off", False)
+                    cmd_output = Data.execCommand("qui log using _templist, append text", False)
+                    cmd_output = Data.execCommand("#review 15", True)
+                    cmd_output = Data.execCommand("qui log close", False)
+                    cmd_output = Data.execCommand("qui infix str cmd 1-244 using _templist if substr(ltrim(cmd),1,1)==\".", True)
+                    cmd_output = Data.execCommand("qui cap erase _templist.log", False)
+                    cmd_output = Data.execCommand("qui cap erase _templist.txt", False)
+                    
+                    # Parse command history if available
+                    if cmd_output:
+                        lines = cmd_output.strip().split("\n")
+                        for line in lines:
+                            if line.strip() and line.strip().startswith("."):
+                                cmd = line.strip()[1:].strip()
+                                if cmd:
+                                    history.append(cmd)
+                except:
+                    pass
+                    
             return [cmd for cmd in history if cmd]  # Filter out empty commands
             
         except Exception as e:
-            logger.warning(f"Error getting command history: {e}")
+            import logging
+            logging = logging.getLogger(__name__)
+            logging.warning(f"Error getting command history: {e}")
             return []
 
     @staticmethod
@@ -876,6 +917,83 @@ def get_test_results() -> Dict[str, Any]:
                 except:
                     pass
                     
+        return results
+
+    @staticmethod
+    def get_all_available_results() -> Dict[str, Any]:
+        """Get ALL possible results using sfi's Data.execCommand to query Stata directly"""
+        from sfi import Data, Scalar, Matrix
+        results = {}
+        
+        try:
+            # First execute a comprehensive return list command
+            Data.execCommand("qui _return list, all", False)
+            
+            # Directly capture the output from return list
+            r_output = Data.execCommand("return list", True)
+            if r_output:
+                # Parse the output to extract all scalars
+                lines = r_output.strip().split('\n')
+                for line in lines:
+                    if ':' in line:
+                        parts = line.strip().split(':', 1)
+                        name = parts[0].strip()
+                        try:
+                            # Try to get this as a scalar
+                            val = Scalar.getValue(name)
+                            if val is not None:
+                                results[name] = val
+                        except:
+                            # If not a scalar, try as a matrix
+                            try:
+                                mat_name = name.replace('r(', '').replace(')', '')
+                                mat = Matrix.get(f"r({mat_name})")
+                                if mat is not None and hasattr(mat, 'shape'):
+                                    results[f"{name}_dim"] = f"{mat.shape[0]}x{mat.shape[1]}"
+                                    # Add sample of values for smaller matrices
+                                    if mat.shape[0] * mat.shape[1] <= 100:
+                                        vals = []
+                                        for i in range(min(mat.shape[0], 5)):
+                                            for j in range(min(mat.shape[1], 5)):
+                                                vals.append(f"{mat[i][j]:.6g}")
+                                        results[f"{name}_sample"] = "[" + ", ".join(vals) + ", ...]"
+                            except:
+                                pass
+            
+            # Similarly for estimation results
+            e_output = Data.execCommand("ereturn list", True)
+            if e_output:
+                # Parse the output to extract all scalars
+                lines = e_output.strip().split('\n')
+                for line in lines:
+                    if ':' in line:
+                        parts = line.strip().split(':', 1)
+                        name = parts[0].strip()
+                        try:
+                            # Try to get this as a scalar
+                            val = Scalar.getValue(name)
+                            if val is not None:
+                                results[name] = val
+                        except:
+                            # If not a scalar, try as a matrix
+                            try:
+                                mat_name = name.replace('e(', '').replace(')', '')
+                                mat = Matrix.get(f"e({mat_name})")
+                                if mat is not None and hasattr(mat, 'shape'):
+                                    results[f"{name}_dim"] = f"{mat.shape[0]}x{mat.shape[1]}"
+                                    # Add column names if available
+                                    try:
+                                        col_names = Matrix.getColNames(f"e({mat_name})")
+                                        if col_names:
+                                            results[f"{name}_colnames"] = col_names
+                                    except:
+                                        pass
+                            except:
+                                pass
+                                
+        except Exception as e:
+            pass  # Silently continue if commands fail
+        
         return results
 
 class ContextManager:
@@ -1063,3 +1181,4 @@ class ProviderFactory:
             return GeminiProvider(api_key=provider_config["api_key"])
         else:
             raise ValueError(f"Unknown provider: {provider_name}")
+`

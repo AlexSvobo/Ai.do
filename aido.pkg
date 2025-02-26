@@ -30,6 +30,6 @@ f stata.toc
 f LICENSE
 f requirements.txt
 f README.md
-f py/__init__.py
-f py/aido.py
-f py/cli.py
+f aido/__init__.py
+f aido/aido.py
+f aido/cli.py
