@@ -523,19 +523,54 @@ class EstimationResults:
             for name, value in test_results.items():
                 output.append(f"{name}: {value:.8g}")  # More decimal places
 
-        # Add this section to the get_current_results() method
         # Add ALL available results using sfi
         all_avail_results = EstimationResults.get_all_available_results()
         if all_avail_results:
             output.append("\n[COMPLETE STATA RESULTS]")
             output.append("All Available Results from Stata:")
             for name in sorted(all_avail_results.keys()):
-                if name not in results and name not in scalars and name not in r_results:
+                if name not in dynamic_results and name not in scalars and name not in r_results:  # Use dynamic_results
                     value = all_avail_results[name]
                     if isinstance(value, (int, float)):
                         output.append(f"{name}: {value:.8g}")
                     else:
                         output.append(f"{name}: {value}")
+
+        # Add this section after the test_results section
+        # Add margins results
+        margins_results = EstimationResults.get_margins_results()
+        if margins_results:
+            output.append("\n[MARGINS RESULTS]")
+            output.append("Marginal Effects and Predictions:")
+            for name, value in margins_results.items():
+                if isinstance(value, (int, float)):
+                    output.append(f"{name}: {value:.8g}")  # More decimal places
+                else:
+                    output.append(f"{name}: {value}")
+
+        # Add Bayesian results
+        bayesian_results = EstimationResults.get_bayesian_results()
+        if bayesian_results:
+            output.append("\n[BAYESIAN ESTIMATION RESULTS]")
+            output.append("MCMC Diagnostics and Posterior Statistics:")
+            for name, value in bayesian_results.items():
+                if isinstance(value, (int, float)):
+                    output.append(f"{name}: {value:.8g}")
+                else:
+                    output.append(f"{name}: {value}")
+
+        # Add stored estimates info
+        stored_estimates = EstimationResults.get_stored_estimates()
+        if stored_estimates:
+            output.append("\n[STORED ESTIMATES]")
+            output.append(stored_estimates["stored_estimates"])
+
+        # Add forecast results
+        forecast_results = EstimationResults.get_forecast_results()
+        if forecast_results:
+            output.append("\n[FORECAST RESULTS]")
+            for name, value in forecast_results.items():
+                output.append(f"{name}: {value:.8g}")
 
         return "\n".join(output)
 
@@ -996,6 +1031,172 @@ class EstimationResults:
         
         return results
 
+    @staticmethod
+    def get_margins_results() -> Dict[str, Any]:
+        """Get comprehensive margins results after margins command"""
+        from sfi import Scalar, Matrix, Data
+        
+        results = {}
+        
+        # Check if we've run a margins command
+        try:
+            # Try to detect if margins was the last command
+            last_cmd = Data.execCommand("di \"`c(cmdline)'\"", False)
+            is_margins = last_cmd and "margins" in last_cmd.lower()
+            
+            if is_margins:
+                # Ensure results are accessible
+                Data.execCommand("qui _return list, all", False)
+            
+            # Get margins-specific matrices
+            margins_matrices = [
+                'e(b_margins)', 'e(V_margins)', 'r(table)',
+                'e(margins)', 'e(Jacobian)', 'e(error)'
+            ]
+            
+            for m in margins_matrices:
+                try:
+                    mat = Matrix.get(m)
+                    if mat is not None and hasattr(mat, 'shape'):
+                        # Store dimensions
+                        results[f"{m}_dim"] = f"{mat.shape[0]}x{mat.shape[1]}"
+                        
+                        # Get column names for interpretability
+                        try:
+                            col_names = Matrix.getColNames(m)
+                            if col_names:
+                                results[f"{m}_colnames"] = col_names
+                        except:
+                            pass
+                        
+                        # Store matrix values for smaller matrices
+                        if mat.shape[0] * mat.shape[1] <= 100:
+                            matrix_vals = []
+                            for i in range(min(mat.shape[0], 10)):
+                                row = []
+                                for j in range(min(mat.shape[1], 10)):
+                                    val = mat[i][j]
+                                    if val is not None:
+                                        row.append(f"{val:.6g}")
+                                    else:
+                                        row.append("null")
+                                matrix_vals.append("[" + ",".join(row) + "]")
+                            
+                            results[f"{m}_values"] = "[" + ",".join(matrix_vals) + "]"
+                except:
+                    continue
+            
+            # Get margins-specific scalars
+            margins_scalars = [
+                'r(k_margins)', 'r(k_by)', 'r(k_at)', 
+                'e(k_margins)', 'e(k_by)', 'e(k_at)',
+                'r(level)', 'e(level)'
+            ]
+            
+            for s in margins_scalars:
+                try:
+                    val = Scalar.getValue(s)
+                    if val is not None:
+                        results[s] = val
+                except:
+                    continue
+                    
+            # Capture at() and over() variables
+            try:
+                at_vars = Macro.getGlobal("e(atmeans)")
+                if at_vars:
+                    results["e(atmeans)"] = at_vars
+            except:
+                pass
+                
+            try:
+                over_vars = Macro.getGlobal("e(over_vars)")
+                if over_vars:
+                    results["e(over_vars)"] = over_vars
+            except:
+                pass
+                
+        except Exception as e:
+            pass  # Silently continue if commands fail
+            
+        return results
+
+    @staticmethod
+    def get_bayesian_results() -> Dict[str, Any]:
+        """Get Bayesian estimation results after bayes commands"""
+        from sfi import Scalar, Matrix, Macro
+        
+        results = {}
+        
+        # Check if we've run a Bayesian command
+        try:
+            cmd = Macro.getGlobal("e(cmd)")
+            is_bayes = cmd and "bayes" in cmd.lower()
+            
+            if is_bayes:
+                # MCMC diagnostics
+                for stat in ["mcmcsize", "burnin", "mcse_med", "ess_med", 
+                            "efficiency", "dic", "log_lik", "gelman_rubin"]:
+                    try:
+                        val = Scalar.getValue(f"e({stat})")
+                        if val is not None:
+                            results[f"e({stat})"] = val
+                    except:
+                        pass
+                        
+                # Get Geweke diagnostics if available
+                try:
+                    geweke_mat = Matrix.get("e(geweke)")
+                    if geweke_mat is not None and hasattr(geweke_mat, 'shape'):
+                        results["e(geweke)_dim"] = f"{geweke_mat.shape[0]}x{geweke_mat.shape[1]}"
+                except:
+                    pass
+        except:
+            pass
+            
+        return results
+
+    @staticmethod
+    def get_stored_estimates() -> Dict[str, Any]:
+        """Get information about stored estimates"""
+        from sfi import Data
+        
+        results = {}
+        
+        try:
+            # Check if there are stored estimates
+            estimates_list = Data.execCommand("estimates dir", True)
+            if estimates_list and estimates_list.strip():
+                results["stored_estimates"] = estimates_list
+        except:
+            pass
+        
+        return results
+
+    @staticmethod
+    def get_forecast_results() -> Dict[str, Any]:
+        """Get time series forecasting results"""
+        from sfi import Data, Scalar
+        
+        results = {}
+        
+        try:
+            # Check for time series forecast command
+            last_cmd = Data.execCommand("di \"`c(cmdline)'\"", False)
+            if last_cmd and any(cmd in last_cmd.lower() for cmd in 
+                            ["forecast", "arima", "var", "vecm"]):
+                for metric in ["rmse", "mae", "mape", "ic"]:
+                    try:
+                        val = Scalar.getValue(f"e({metric})")
+                        if val is not None:
+                            results[f"e({metric})"] = val
+                    except:
+                        pass
+        except:
+            pass
+        
+        return results
+
 class ContextManager:
     def __init__(self):
         self.dataset_context: Optional[DatasetContext] = None
@@ -1055,7 +1256,7 @@ class ContextManager:
                         if len(parts) > 1:
                             cmd = parts[1].strip()
                             if cmd:
-                                commands.append(cmd)
+                                commands.append(cmd.strip())
                 
                 # Update history with parsed commands (most recent first)
                 self.command_history = commands[:MAX_HISTORY_ITEMS]
