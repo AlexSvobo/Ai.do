@@ -1124,19 +1124,38 @@ class EstimationResults:
     @staticmethod
     def get_bayesian_results() -> Dict[str, Any]:
         """Get Bayesian estimation results after bayes commands"""
-        from sfi import Scalar, Matrix, Macro
+        from sfi import Scalar, Matrix, Macro, Data
         
         results = {}
         
-        # Check if we've run a Bayesian command
+        # Check if we've run a Bayesian command - more comprehensive check
         try:
             cmd = Macro.getGlobal("e(cmd)")
-            is_bayes = cmd and "bayes" in cmd.lower()
+            cmdline = Macro.getGlobal("e(cmdline)")
+            
+            # Multiple detection methods for Bayesian commands
+            is_bayes = (cmd and "bayes" in cmd.lower()) or \
+                    (cmdline and "bayes" in cmdline.lower())
+            
+            # Alternative detection method
+            if not is_bayes:
+                # Try to detect specific Bayesian output markers
+                try:
+                    val = Scalar.getValue("e(mcmcsize)")
+                    if val is not None:
+                        is_bayes = True
+                except:
+                    pass
             
             if is_bayes:
-                # MCMC diagnostics
+                # First ensure we capture all return values
+                Data.execCommand("qui _return list, all", False)
+                
+                # Get all potential MCMC diagnostics
                 for stat in ["mcmcsize", "burnin", "mcse_med", "ess_med", 
-                            "efficiency", "dic", "log_lik", "gelman_rubin"]:
+                            "efficiency", "dic", "log_lik", "gelman_rubin",
+                            # Additional diagnostics
+                            "n_chains", "n_iter", "n_warmup", "acceptance_rate"]:
                     try:
                         val = Scalar.getValue(f"e({stat})")
                         if val is not None:
@@ -1144,16 +1163,50 @@ class EstimationResults:
                     except:
                         pass
                         
-                # Get Geweke diagnostics if available
-                try:
-                    geweke_mat = Matrix.get("e(geweke)")
-                    if geweke_mat is not None and hasattr(geweke_mat, 'shape'):
-                        results["e(geweke)_dim"] = f"{geweke_mat.shape[0]}x{geweke_mat.shape[1]}"
-                except:
-                    pass
-        except:
-            pass
-            
+                # Get Bayesian matrices with better error handling
+                bayes_matrices = ["geweke", "mcerror", "ess", "ac", "cusum"]
+                
+                for m in bayes_matrices:
+                    try:
+                        mat = Matrix.get(f"e({m})")
+                        if mat is not None and hasattr(mat, 'shape'):
+                            # Store dimensions
+                            results[f"e({m})_dim"] = f"{mat.shape[0]}x{mat.shape[1]}"
+                            
+                            # For smaller matrices, include contents
+                            if mat.shape[0] * mat.shape[1] <= 100:
+                                matrix_vals = []
+                                for i in range(min(mat.shape[0], 10)):  # First 10 rows max
+                                    row = []
+                                    for j in range(min(mat.shape[1], 10)):  # First 10 cols max
+                                        try:
+                                            val = mat[i][j]
+                                            if val is not None:
+                                                row.append(f"{val:.6g}")
+                                            else:
+                                                row.append("null")
+                                        except:
+                                            row.append("error")
+                                    matrix_vals.append("[" + ",".join(row) + "]")
+                                
+                                results[f"e({m})_values"] = "[" + ",".join(matrix_vals) + "]"
+                    except:
+                        continue
+                
+                # Capture Bayesian-related macros
+                bayes_macros = ["prior", "chains", "aexog", "randomize", "seed", "saving"]
+                for m in bayes_macros:
+                    try:
+                        val = Macro.getGlobal(f"e({m})")
+                        if val:
+                            results[f"e({m})"] = val
+                    except:
+                        continue
+        except Exception as e:
+            import logging
+            logging = logging.getLogger(__name__)
+            logging.warning(f"Error getting Bayesian results: {e}")
+        
         return results
 
     @staticmethod
