@@ -572,6 +572,28 @@ class EstimationResults:
             for name, value in forecast_results.items():
                 output.append(f"{name}: {value:.8g}")
 
+        # Add SEM model results
+        sem_results = EstimationResults.get_sem_results()
+        if sem_results:
+            output.append("\n[SEM RESULTS]")
+            output.append("Structural Equation Model Fit Statistics:")
+            for name, value in sem_results.items():
+                if isinstance(value, (int, float)):
+                    output.append(f"{name}: {value:.8g}")
+                else:
+                    output.append(f"{name}: {value}")
+
+        # Add mixed model results
+        mixed_results = EstimationResults.get_mixed_model_results()
+        if mixed_results:
+            output.append("\n[MIXED MODEL RESULTS]")
+            output.append("Multilevel/Mixed Model Statistics:")
+            for name, value in mixed_results.items():
+                if isinstance(value, (int, float)):
+                    output.append(f"{name}: {value:.8g}")
+                else:
+                    output.append(f"{name}: {value}")
+
         return "\n".join(output)
 
     @staticmethod
@@ -1248,6 +1270,110 @@ class EstimationResults:
         except:
             pass
         
+        return results
+
+    @staticmethod
+    def get_sem_results() -> Dict[str, Any]:
+        """Get Structural Equation Modeling results"""
+        from sfi import Scalar, Matrix, Macro, Data
+        
+        results = {}
+        try:
+            # Multiple ways to detect SEM command
+            cmd = Macro.getGlobal("e(cmd)")
+            cmdline = Macro.getGlobal("e(cmdline)")
+            is_sem = (cmd and cmd.lower() in ["sem", "gsem"]) or \
+                    (cmdline and any(c in cmdline.lower() for c in ["sem", "gsem"]))
+            
+            if is_sem:
+                # Ensure we get all results
+                Data.execCommand("qui _return list, all", False)
+                
+                # Get SEM-specific fit statistics
+                for stat in ["n_groups", "n_missing", "n_nobs", "n_parms",
+                        "df_m", "chi2", "p", "cfi", "tli", "srmr", "cd", "rmsea",
+                        "aic", "bic", "ic", "vce"]:
+                    try:
+                        val = Scalar.getValue(f"e({stat})")
+                        if val is not None:
+                            results[f"e({stat})"] = val
+                    except:
+                        pass
+                        
+                # Get path diagram information if available
+                try:
+                    # Try to get path coefficients
+                    path_matrix = Matrix.get("e(b)")
+                    if path_matrix is not None and hasattr(path_matrix, 'shape'):
+                        results["sem_path_coefficients"] = "Available"
+                        
+                        # Get parameter names
+                        try:
+                            param_names = Matrix.getColNames("e(b)")
+                            if param_names:
+                                results["sem_parameters"] = ", ".join(param_names[:10]) + "..." if len(param_names) > 10 else ", ".join(param_names)
+                        except:
+                            pass
+                except:
+                    pass
+        except Exception as e:
+            import logging
+            logging = logging.getLogger(__name__)
+            logging.warning(f"Error getting SEM results: {e}")
+            
+        return results
+
+    @staticmethod
+    def get_mixed_model_results() -> Dict[str, Any]:
+        """Get multilevel/mixed model results"""
+        from sfi import Scalar, Matrix, Macro, Data
+        
+        results = {}
+        try:
+            cmd = Macro.getGlobal("e(cmd)")
+            cmdline = Macro.getGlobal("e(cmdline)")
+            
+            is_mixed = (cmd and cmd.lower() in ["mixed", "xtmixed", "melogit", "meprobit", 
+                                            "mepoisson", "menbreg", "xtmelogit", "xtmepoisson"]) or \
+                    (cmdline and any(c in cmdline.lower() for c in 
+                                    ["mixed", "me", "xtmixed", "xtme"]))
+            
+            if is_mixed:
+                # Ensure we get all results
+                Data.execCommand("qui _return list, all", False)
+                
+                # Get mixed model specific scalars
+                for stat in ["N", "N_g", "g_min", "g_avg", "g_max", 
+                        "ll", "ll_c", "chi2", "p", "rank", "k", "k_eq",
+                        "ic", "converged", "rank0"]:
+                    try:
+                        val = Scalar.getValue(f"e({stat})")
+                        if val is not None:
+                            results[f"e({stat})"] = val
+                    except:
+                        pass
+                        
+                # Get group information
+                try:
+                    group_var = Macro.getGlobal("e(ivars)")
+                    if group_var:
+                        results["e(ivars)"] = group_var
+                except:
+                    pass
+                
+                # Get random effects matrices
+                for m in ["b_s", "V_s", "sigma_u", "Sigma"]:
+                    try:
+                        mat = Matrix.get(f"e({m})")
+                        if mat is not None and hasattr(mat, 'shape'):
+                            results[f"e({m})_dim"] = f"{mat.shape[0]}x{mat.shape[1]}"
+                    except:
+                        continue
+        except Exception as e:
+            import logging
+            logging = logging.getLogger(__name__)
+            logging.warning(f"Error getting mixed model results: {e}")
+            
         return results
 
 class ContextManager:
