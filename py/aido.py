@@ -390,96 +390,199 @@ class EstimationResults:
         except:
             return {}
 
-    @staticmethod
-    def get_current_results() -> str:
-        output = []
+@staticmethod
+def get_current_results() -> str:
+    """Get ALL Stata results in a comprehensive, formatted way"""
+    output = []
+    
+    # Get all e() and r() results using dynamic methods
+    dynamic_results = EstimationResults.get_dynamic_results()
+    if dynamic_results:
+        output.append("\n[DYNAMIC RESULTS]")
+        for name, value in sorted(dynamic_results.items()):
+            if isinstance(value, (int, float)):
+                output.append(f"{name}: {value:.8g}")  # More decimal places
+            else:
+                output.append(f"{name}: {value}")
+    
+    # Get all scalars
+    scalars = EstimationResults.get_all_scalars()
+    if scalars:
+        output.append("\n[SCALARS]")
+        for name, value in scalars.items():
+            if value is not None:
+                output.append(f"{name}: {value:.8g}")  # More decimal places for precision
+    
+    # Get all macros
+    macros = EstimationResults.get_all_macros()
+    if macros:
+        output.append("\n[MACROS]")
+        for name, value in macros.items():
+            if value:
+                output.append(f"{name}: {value}")
+    
+    # Get coefficient table with more detail
+    coef_table = EstimationResults.get_coefficient_table()
+    if coef_table and coef_table.get('coef'):  # Check if we have coefficients
+        output.append("\n[COEFFICIENT TABLE]")
+        output.append("Variable | Coef. | Std.Err. | t/z | P>|t/z| | [95% Conf. Interval]")
+        output.append("-" * 80)
         
-        # Get all scalars
-        scalars = EstimationResults.get_all_scalars()
-        if scalars:
-            output.append("\n[SCALARS]")
-            for name, value in scalars.items():
-                if value is not None:
-                    output.append(f"{name}: {value:.6g}")
+        for i, name in enumerate(coef_table['names']):
+            try:
+                row = (f"{name:12} | {coef_table['coef'][i]:10.6f} | "  # More decimal places
+                      f"{coef_table['se'][i]:10.6f} | {coef_table['t_stat'][i]:8.4f} | "  # More decimal places
+                      f"{coef_table['p_value'][i]:8.6f} | [{coef_table['ci_lower'][i]:10.6f}, "  # More decimal places
+                      f"{coef_table['ci_upper'][i]:10.6f}]")  # More decimal places
+                output.append(row)
+            except:
+                continue
+    
+    # Get ALL matrices - don't limit to just names and dimensions
+    try:
+        # First try standard matrices
+        matrix_names = [
+            'e(b)', 'e(V)', 'e(ilog)', 'e(gradient)', 'e(S)', 'r(table)',
+            # Add more potential matrices
+            'e(Sigma)', 'r(R)', 'r(eigenvals)', 'r(eigenvectors)', 
+            'r(loadings)', 'r(stats)'
+        ]
         
-        # Get all macros
-        macros = EstimationResults.get_all_macros()
-        if macros:
-            output.append("\n[MACROS]")
-            for name, value in macros.items():
-                if value:
-                    output.append(f"{name}: {value}")
+        matrices = []
+        matrix_contents = []
         
-        # Get coefficient table
-        coef_table = EstimationResults.get_coefficient_table()
-        if coef_table and coef_table.get('coef'):  # Check if we have coefficients
-            output.append("\n[COEFFICIENT TABLE]")
-            output.append("Variable | Coef. | Std.Err. | t/z | P>|t/z| | [95% Conf. Interval]")
-            output.append("-" * 80)
+        for m in matrix_names:
+            try:
+                mat = Matrix.get(m)
+                if mat is not None and hasattr(mat, 'shape'):
+                    # Add matrix dimensions
+                    matrices.append(f"{m}: {mat.shape[0]}x{mat.shape[1]}")
+                    
+                    # For smaller matrices, also include full contents
+                    if mat.shape[0] * mat.shape[1] <= 100:  # Increased size threshold
+                        content = [f"{m} contents:"]
+                        # Try to get column names
+                        try:
+                            col_names = Matrix.getColNames(m)
+                            if col_names:
+                                content.append("Column names: " + ", ".join(col_names))
+                        except:
+                            pass
+                        
+                        # Add matrix values
+                        for i in range(min(mat.shape[0], 10)):  # Show up to 10 rows
+                            row_vals = []
+                            for j in range(min(mat.shape[1], 10)):  # Show up to 10 columns
+                                val = mat[i][j]
+                                if val is not None:
+                                    row_vals.append(f"{val:.6g}")  # Format numbers
+                                else:
+                                    row_vals.append(".")
+                            content.append(f"Row {i+1}: [{', '.join(row_vals)}]")
+                        
+                        matrix_contents.extend(content)
+            except:
+                continue
+        
+        if matrices:
+            output.append("\n[MATRICES]")
+            output.extend(matrices)
+        
+        if matrix_contents:
+            output.append("\n[MATRIX CONTENTS]")
+            output.extend(matrix_contents)
             
-            for i, name in enumerate(coef_table['names']):
-                try:
-                    row = (f"{name:12} | {coef_table['coef'][i]:8.4f} | "
-                          f"{coef_table['se'][i]:8.4f} | {coef_table['t_stat'][i]:6.3f} | "
-                          f"{coef_table['p_value'][i]:6.4f} | [{coef_table['ci_lower'][i]:8.4f}, "
-                          f"{coef_table['ci_upper'][i]:8.4f}]")
-                    output.append(row)
-                except:
-                    continue
-        
-        # Get matrices (just names and dimensions)
-        try:
-            matrix_names = ['e(b)', 'e(V)', 'e(ilog)', 'e(gradient)', 'e(S)', 'r(table)']
-            matrices = []
-            for m in matrix_names:
-                try:
-                    mat = Matrix.get(m)
-                    if mat is not None and hasattr(mat, 'shape'):
-                        matrices.append(f"{m}: {mat.shape[0]}x{mat.shape[1]}")
-                except:
-                    continue
-            
-            if matrices:
-                output.append("\n[MATRICES]")
-                output.extend(matrices)
-        except:
-            pass
+    except:
+        pass
 
-        # Add r() results
-        r_results = EstimationResults.get_r_results()
-        if r_results:
-            output.append("\n[R RESULTS]")
-            for name, value in r_results.items():
-                if isinstance(value, (int, float)):
-                    output.append(f"{name}: {value:.6g}")
-                else:
-                    output.append(f"{name}: {value}")
+    # Add comprehensive r() results
+    r_results = EstimationResults.get_r_results()
+    if r_results:
+        output.append("\n[R RESULTS]")
+        output.append("Summary Statistics and Test Results:")
         
-        # Add survey results
-        svy_results = EstimationResults.get_svy_results()
-        if svy_results:
-            output.append("\n[SURVEY RESULTS]")
-            for name, value in svy_results.items():
-                output.append(f"{name}: {value:.6g}")
-        
-        # Add test results
-        test_results = EstimationResults.get_test_results()
-        if test_results:
-            output.append("\n[TEST RESULTS]")
-            for name, value in test_results.items():
-                output.append(f"{name}: {value:.6g}")
-        
-        return "\n".join(output)
+        # Sort r() results by name for better organization
+        for name in sorted(r_results.keys()):
+            value = r_results[name]
+            if isinstance(value, (int, float)):
+                output.append(f"{name}: {value:.8g}")  # More decimal places
+            else:
+                output.append(f"{name}: {value}")
+    
+    # Add survey results
+    svy_results = EstimationResults.get_svy_results()
+    if svy_results:
+        output.append("\n[SURVEY RESULTS]")
+        for name, value in svy_results.items():
+            output.append(f"{name}: {value:.8g}")  # More decimal places
+    
+    # Add test results
+    test_results = EstimationResults.get_test_results()
+    if test_results:
+        output.append("\n[TEST RESULTS]")
+        for name, value in test_results.items():
+            output.append(f"{name}: {value:.8g}")  # More decimal places
+    
+    return "\n".join(output)
 
     @staticmethod
     def get_r_results() -> Dict[str, Any]:
-        """Get r() results after non-estimation commands"""
-        # Common r() scalars
-        r_scalars = ['r(N)', 'r(sum)', 'r(mean)', 'r(sd)', 'r(Var)', 'r(min)', 'r(max)', 'r(sum_w)']
-        # Common r() matrices
-        r_matrices = ['r(table)', 'r(stats)', 'r(corr)', 'r(C)']
+        """Get COMPLETE r() results after non-estimation commands like summarize"""
+        from sfi import Scalar, Matrix
         
+        # Comprehensive list of r() scalars from ALL statistical commands
+        r_scalars = [
+            # Basic summary statistics (summarize)
+            'r(N)', 'r(sum)', 'r(mean)', 'r(sd)', 'r(Var)', 'r(min)', 'r(max)', 'r(sum_w)',
+            
+            # Percentiles (summarize, detail)
+            'r(p1)', 'r(p5)', 'r(p10)', 'r(p25)', 'r(p50)', 'r(p75)', 'r(p90)', 'r(p95)', 'r(p99)',
+            
+            # Additional detailed statistics
+            'r(skewness)', 'r(kurtosis)', 'r(median)', 'r(iqr)', 'r(q)', 'r(range)', 
+            
+            # Test statistics (ttest)
+            'r(N_1)', 'r(N_2)', 'r(p)', 'r(p_l)', 'r(p_u)', 'r(p_exact)',
+            'r(t)', 'r(t_p)', 'r(df_t)', 'r(se)', 'r(sd_1)', 'r(sd_2)',
+            'r(z)', 'r(z_p)', 'r(level)', 
+            
+            # Correlation and covariance (correlate)
+            'r(rho)', 'r(cov_12)', 'r(corr)', 'r(cov)',
+            
+            # Tabulation results (tabulate)
+            'r(r)', 'r(c)', 'r(chi2)', 'r(p_pearson)', 'r(gamma)', 'r(V)',
+            'r(tau_a)', 'r(tau_b)', 'r(cramers_V)', 'r(expected)',
+            
+            # ANOVA and regression
+            'r(mss)', 'r(rss)', 'r(tss)', 'r(F)', 'r(df_m)', 'r(df_r)',
+            'r(r2)', 'r(r2_a)', 'r(rmse)',
+            
+            # Sample size information
+            'r(k)', 'r(n)', 'r(sum_w)', 'r(N_strata)', 'r(N_psu)',
+            
+            # Return codes
+            'r(rc)', 'r(level)',
+            
+            # Regression diagnostics
+            'r(bgodfrey)', 'r(durbinalt)', 'r(dwstat)', 'r(rmse_rss)',
+            
+            # Factor analysis and PCA
+            'r(f)', 'r(p_f)', 'r(rho_w)', 'r(df_m)', 'r(df_r)', 'r(chi2_p)',
+            
+            # Additional statistical tests
+            'r(W)', 'r(V_sl)', 'r(df)', 'r(z_sl)', 'r(p_sl)', 'r(chi2_adj)',
+            
+            # Equality tests
+            'r(drop)', 'r(df_r1)', 'r(df_r2)', 'r(f)', 'r(p_f)',
+            
+            # Various scalars with numerical suffixes (for pairs of statistics)
+            'r(mu_1)', 'r(mu_2)', 'r(mu_diff)', 'r(se_diff)'
+        ]
+        
+        # Dynamically try to get both normal and numbered variants (e.g., r(N), r(N1), etc.)
         results = {}
+        
+        # First get all explicit scalars in our comprehensive list
         for s in r_scalars:
             try:
                 val = Scalar.getValue(s)
@@ -487,15 +590,66 @@ class EstimationResults:
                     results[s] = val
             except:
                 continue
-                
+        
+        # Now add ALL numbered variants we might have missed
+        for base in ['N_', 'mu_', 'sd_', 'se_', 'df_', 't_', 'z_', 'p_', 'chi2_', 'F_']:
+            for i in range(1, 10):  # Try numbers 1-9
+                try:
+                    name = f"r({base}{i})"
+                    val = Scalar.getValue(name)
+                    if val is not None:
+                        results[name] = val
+                except:
+                    continue
+        
+        # Get ALL matrices with detailed contents
+        r_matrices = [
+            'r(table)', 'r(stats)', 'r(corr)', 'r(C)', 'r(Cns)',
+            'r(b)', 'r(se)', 'r(ci)', 'r(V)', 'r(R)',
+            'r(means)', 'r(sums)', 'r(freqs)', 'r(p)', 'r(Sigma)',
+            'r(S)', 'r(D)', 'r(Ev)', 'r(L)', 'r(lb)', 'r(ub)',
+            'r(chol)', 'r(P)', 'r(T)', 'r(eigen)'
+        ]
+        
         for m in r_matrices:
             try:
                 mat = Matrix.get(m)
                 if mat is not None:
-                    results[m] = mat
+                    # Store complete matrix dimensions
+                    if hasattr(mat, 'shape'):
+                        results[f"{m}_dim"] = f"{mat.shape[0]}x{mat.shape[1]}"
+                    
+                    # For ALL matrices, store actual values regardless of size
+                    # This ensures we capture everything
+                    if hasattr(mat, 'shape'):
+                        # Format the matrix in a structured way
+                        matrix_str = "["
+                        for i in range(min(mat.shape[0], 20)):  # Limit to first 20 rows if huge
+                            row_vals = []
+                            for j in range(min(mat.shape[1], 10)):  # Limit to first 10 cols if huge
+                                val = mat[i][j]
+                                if val is not None:
+                                    row_vals.append(f"{val:.6g}")
+                                else:
+                                    row_vals.append(".")
+                            matrix_str += "[" + ", ".join(row_vals) + "]"
+                            if i < min(mat.shape[0], 20) - 1:
+                                matrix_str += ", "
+                        matrix_str += "]"
+                        
+                        # Store the formatted matrix
+                        results[f"{m}_values"] = matrix_str
+                        
+                        # Also capture column names if available
+                        try:
+                            col_names = Matrix.getColNames(m)
+                            if col_names:
+                                results[f"{m}_colnames"] = col_names
+                        except:
+                            pass
             except:
                 continue
-                
+        
         return results
 
     @staticmethod
@@ -517,47 +671,119 @@ class EstimationResults:
                 continue
         return results
 
-    @staticmethod
-    def get_test_results() -> Dict[str, Any]:
-        """Get statistical test results more comprehensively"""
-        # Expand test result scalars
-        test_scalars = [
-            # Basic test statistics
-            'r(chi2)', 'r(p)', 'r(F)', 'r(df)', 'r(df_r)',
-            # Additional test metrics
-            'r(p_l)', 'r(p_u)', 'r(p_exact)',  # For exact tests
-            'r(t)', 'r(se)', 'r(sd)',  # For t-tests
-            'r(z)', 'r(level)',  # For z-tests
-            'r(N_1)', 'r(N_2)', 'r(N_pair)',  # Sample sizes
-            'r(mu_1)', 'r(mu_2)',  # Group means
-            'r(rho)', 'r(corr)',  # Correlation tests
-            # ANOVA specific
-            'r(mss)', 'r(rss)', 'r(tss)',
-            'r(r2)', 'r(r2_a)',
-            # Additional test information
-            'r(k)', 'r(n)', 'r(sum_w)'
-        ]
+@staticmethod
+def get_test_results() -> Dict[str, Any]:
+    """Get ALL statistical test results without missing anything"""
+    from sfi import Scalar, Matrix, Data
+    
+    # Expanded test result scalars - covers virtually everything
+    test_scalars = [
+        # Basic test statistics
+        'r(chi2)', 'r(p)', 'r(F)', 'r(df)', 'r(df_r)',
+        
+        # Additional test metrics for ALL test types
+        'r(p_l)', 'r(p_u)', 'r(p_exact)',  # For exact tests
+        'r(t)', 'r(t_p)', 'r(se)', 'r(sd)',  # For t-tests
+        'r(z)', 'r(z_p)', 'r(level)',  # For z-tests
+        'r(N_1)', 'r(N_2)', 'r(N_pair)',  # Sample sizes
+        'r(mu_1)', 'r(mu_2)', 'r(mu_diff)',  # Group means
+        'r(rho)', 'r(corr)',  # Correlation tests
+        
+        # ANOVA specific
+        'r(mss)', 'r(rss)', 'r(tss)',
+        'r(r2)', 'r(r2_a)',
+        
+        # Additional test information
+        'r(k)', 'r(n)', 'r(sum_w)',
+        
+        # Regression diagnostics - used by estat commands
+        'r(bgodfrey)', 'r(durbinalt)', 'r(dwstat)',
+        'r(estat)', 'r(p_estat)', 'r(scalar)',
+        'r(w)', 'r(w_p)', 'r(h)', 'r(h_p)',
+        
+        # Prediction tests
+        'r(pr2)', 'r(F_f)', 'r(p_f)',
+        
+        # Test statistics with numbered variants
+        'r(df1)', 'r(df2)', 'r(stat1)', 'r(stat2)',
+        'r(p1)', 'r(p2)', 'r(se1)', 'r(se2)'
+    ]
+    
+    # ALSO check if we're after a test command by looking at command history
+    try:
+        # Try to get last command from Stata
+        last_cmd = Data.execCommand("di \"`c(cmdline)'\"", False)
+        if last_cmd and any(test_type in last_cmd.lower() for test_type in 
+                           ['test', 'estat', 'hausman', 'lrtest', 'ttest', 
+                            'pwcorr', 'correlate', 'tabulate']):
+            # After a test command, try displaying and capturing ALL test results
+            Data.execCommand("qui return list", False)
+    except:
+        pass
 
-        results = {}
-        for s in test_scalars:
+    results = {}
+    
+    # Get specific scalar values
+    for s in test_scalars:
+        try:
+            val = Scalar.getValue(s)
+            if val is not None:
+                results[s] = val
+        except:
+            continue
+    
+    # Try ALL possible numeric suffixes too (1-20)
+    for base in ['chi2_', 'F_', 'p_', 'stat_', 'df_', 'w_', 't_', 'z_']:
+        for i in range(1, 21):  # Try suffixes 1-20
             try:
-                val = Scalar.getValue(s)
+                name = f"r({base}{i})"
+                val = Scalar.getValue(name)
                 if val is not None:
-                    results[s] = val
+                    results[name] = val
             except:
                 continue
 
-        # Also capture any test-specific matrices
-        test_matrices = ['r(table)', 'r(chi2)', 'r(stats)']
-        for m in test_matrices:
-            try:
-                mat = Matrix.get(m)
-                if mat is not None:
-                    results[f"{m}_matrix"] = mat
-            except:
-                continue
+    # Get test-specific matrices with FULL contents
+    test_matrices = [
+        'r(table)', 'r(chi2)', 'r(stats)', 'r(corr)',
+        'r(Sigma)', 'r(V)', 'r(S)', 'r(b)', 'r(se)'
+    ]
+    
+    for m in test_matrices:
+        try:
+            mat = Matrix.get(m)
+            if mat is not None:
+                # Store dimensions
+                results[f"{m}_dim"] = f"{mat.shape[0]}x{mat.shape[1]}"
+                
+                # Store contents regardless of size
+                matrix_vals = []
+                for i in range(min(mat.shape[0], 10)):  # First 10 rows max
+                    row = []
+                    for j in range(min(mat.shape[1], 10)):  # First 10 cols max
+                        try:
+                            val = mat[i][j]
+                            if val is not None:
+                                row.append(f"{val:.6g}")
+                            else:
+                                row.append("null")
+                        except:
+                            row.append("error")
+                    matrix_vals.append("[" + ",".join(row) + "]")
+                
+                results[f"{m}_values"] = "[" + ",".join(matrix_vals) + "]"
+                
+                # Try to get column names
+                try:
+                    colnames = Matrix.getColNames(m)
+                    if colnames:
+                        results[f"{m}_colnames"] = colnames
+                except:
+                    pass
+        except:
+            continue
 
-        return results
+    return results
 
     @staticmethod
     def get_command_history() -> List[str]:
@@ -585,6 +811,72 @@ class EstimationResults:
         except Exception as e:
             logger.warning(f"Error getting command history: {e}")
             return []
+
+    @staticmethod
+    def get_dynamic_results() -> Dict[str, Any]:
+        """Dynamically retrieve ALL available e() and r() results using ereturn list and return list"""
+        from sfi import Data, Macro, Scalar
+        results = {}
+        
+        # Get ALL e() results dynamically
+        try:
+            # Execute the ereturn list command and capture its output
+            Data.execCommand("qui _return list, all", False)  # This shows ALL stored results
+            
+            # Try to get every possible e() scalar
+            for prefix in ["e(", "r("]:
+                # Start with common results we expect
+                known_results = EstimationResults._get_common_results(prefix)
+                if known_results:
+                    for name, value in known_results.items():
+                        results[name] = value
+                
+                # Then try to capture any additional results
+                # We'll try a range of numbers that might be part of result names
+                for i in range(1, 50):
+                    for suffix in ["", "_aux", "_mi", "_eq"]:
+                        for type_suffix in ["", "_p", "_se", "_ci", "_df"]:
+                            try:
+                                name = f"{prefix}{i}{suffix}{type_suffix})"
+                                val = Scalar.getValue(name)
+                                if val is not None:
+                                    results[name] = val
+                            except:
+                                pass
+        except Exception as e:
+            pass  # Silently continue if this fails
+        
+        return results
+
+    @staticmethod
+    def _get_common_results(prefix: str) -> Dict[str, Any]:
+        """Get common result patterns based on prefix"""
+        from sfi import Scalar
+        results = {}
+        
+        # Extended list of common results with all numeric suffixes
+        suffixes = ["", "1", "2", "3", "4", "5"]
+        base_names = [
+            "N", "df", "df_m", "df_r", "F", "r2", "rmse", "mss", "rss", "ll", "ll_0", 
+            "chi2", "p", "rank", "N_clust", "ic", "g", "g_min", "g_max", "g_avg", 
+            "sigma", "sigma_e", "sigma_u", "r2_w", "r2_b", "r2_o", "rho", "N_g",
+            "sum", "mean", "Var", "sd", "min", "max", "sum_w", "dev", 
+            "p1", "p5", "p10", "p25", "p50", "p75", "p90", "p95", "p99",
+            "skewness", "kurtosis", "median", "iqr", "q", "range",
+            "t", "z", "rho", "cov", "corr", "N_strata", "N_psu", "N_pop", "rc", "level"
+        ]
+        
+        for base in base_names:
+            for suffix in suffixes:
+                try:
+                    name = f"{prefix}{base}{suffix})"
+                    val = Scalar.getValue(name)
+                    if val is not None:
+                        results[name] = val
+                except:
+                    pass
+                    
+        return results
 
 class ContextManager:
     def __init__(self):
