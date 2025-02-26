@@ -14,7 +14,7 @@ d   * Google Gemini (recommended)
 d   * Hugging Face
 d
 d Additional Installation Required:
-d 1. Python module files from: https://github.com/alexsvobo/Ai.do
+d 1. Python module installation will be handled during package setup
 d 2. Run in terminal: pip install aiohttp>=3.8.0
 d
 d After installation, configure API key:
@@ -26,3 +26,10 @@ f aido.ado
 f aido_config.ado
 f aido.sthlp
 f aido.dlg
+f stata.toc
+f LICENSE
+f requirements.txt
+f README.md
+f aido/__init__.py
+f aido/aido.py
+f aido/cli.py
