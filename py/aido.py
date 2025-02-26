@@ -390,140 +390,140 @@ class EstimationResults:
         except:
             return {}
 
-@staticmethod
-def get_current_results() -> str:
-    """Get ALL Stata results in a comprehensive, formatted way"""
-    output = []
-    
-    # Get all e() and r() results using dynamic methods
-    dynamic_results = EstimationResults.get_dynamic_results()
-    if dynamic_results:
-        output.append("\n[DYNAMIC RESULTS]")
-        for name, value in sorted(dynamic_results.items()):
-            if isinstance(value, (int, float)):
-                output.append(f"{name}: {value:.8g}")  # More decimal places
-            else:
-                output.append(f"{name}: {value}")
-    
-    # Get all scalars
-    scalars = EstimationResults.get_all_scalars()
-    if scalars:
-        output.append("\n[SCALARS]")
-        for name, value in scalars.items():
-            if value is not None:
-                output.append(f"{name}: {value:.8g}")  # More decimal places for precision
-    
-    # Get all macros
-    macros = EstimationResults.get_all_macros()
-    if macros:
-        output.append("\n[MACROS]")
-        for name, value in macros.items():
-            if value:
-                output.append(f"{name}: {value}")
-    
-    # Get coefficient table with more detail
-    coef_table = EstimationResults.get_coefficient_table()
-    if coef_table and coef_table.get('coef'):  # Check if we have coefficients
-        output.append("\n[COEFFICIENT TABLE]")
-        output.append("Variable | Coef. | Std.Err. | t/z | P>|t/z| | [95% Conf. Interval]")
-        output.append("-" * 80)
+    @staticmethod
+    def get_current_results() -> str:
+        """Get ALL Stata results in a comprehensive, formatted way"""
+        output = []
         
-        for i, name in enumerate(coef_table['names']):
-            try:
-                row = (f"{name:12} | {coef_table['coef'][i]:10.6f} | "  # More decimal places
-                      f"{coef_table['se'][i]:10.6f} | {coef_table['t_stat'][i]:8.4f} | "  # More decimal places
-                      f"{coef_table['p_value'][i]:8.6f} | [{coef_table['ci_lower'][i]:10.6f}, "  # More decimal places
-                      f"{coef_table['ci_upper'][i]:10.6f}]")  # More decimal places
-                output.append(row)
-            except:
-                continue
-    
-    # Get ALL matrices - don't limit to just names and dimensions
-    try:
-        # First try standard matrices
-        matrix_names = [
-            'e(b)', 'e(V)', 'e(ilog)', 'e(gradient)', 'e(S)', 'r(table)',
-            # Add more potential matrices
-            'e(Sigma)', 'r(R)', 'r(eigenvals)', 'r(eigenvectors)', 
-            'r(loadings)', 'r(stats)'
-        ]
+        # Get all e() and r() results using dynamic methods
+        dynamic_results = EstimationResults.get_dynamic_results()
+        if dynamic_results:
+            output.append("\n[DYNAMIC RESULTS]")
+            for name, value in sorted(dynamic_results.items()):
+                if isinstance(value, (int, float)):
+                    output.append(f"{name}: {value:.8g}")  # More decimal places
+                else:
+                    output.append(f"{name}: {value}")
         
-        matrices = []
-        matrix_contents = []
+        # Get all scalars
+        scalars = EstimationResults.get_all_scalars()
+        if scalars:
+            output.append("\n[SCALARS]")
+            for name, value in scalars.items():
+                if value is not None:
+                    output.append(f"{name}: {value:.8g}")  # More decimal places for precision
         
-        for m in matrix_names:
-            try:
-                mat = Matrix.get(m)
-                if mat is not None and hasattr(mat, 'shape'):
-                    # Add matrix dimensions
-                    matrices.append(f"{m}: {mat.shape[0]}x{mat.shape[1]}")
-                    
-                    # For smaller matrices, also include full contents
-                    if mat.shape[0] * mat.shape[1] <= 100:  # Increased size threshold
-                        content = [f"{m} contents:"]
-                        # Try to get column names
-                        try:
-                            col_names = Matrix.getColNames(m)
-                            if col_names:
-                                content.append("Column names: " + ", ".join(col_names))
-                        except:
-                            pass
-                        
-                        # Add matrix values
-                        for i in range(min(mat.shape[0], 10)):  # Show up to 10 rows
-                            row_vals = []
-                            for j in range(min(mat.shape[1], 10)):  # Show up to 10 columns
-                                val = mat[i][j]
-                                if val is not None:
-                                    row_vals.append(f"{val:.6g}")  # Format numbers
-                                else:
-                                    row_vals.append(".")
-                            content.append(f"Row {i+1}: [{', '.join(row_vals)}]")
-                        
-                        matrix_contents.extend(content)
-            except:
-                continue
+        # Get all macros
+        macros = EstimationResults.get_all_macros()
+        if macros:
+            output.append("\n[MACROS]")
+            for name, value in macros.items():
+                if value:
+                    output.append(f"{name}: {value}")
         
-        if matrices:
-            output.append("\n[MATRICES]")
-            output.extend(matrices)
-        
-        if matrix_contents:
-            output.append("\n[MATRIX CONTENTS]")
-            output.extend(matrix_contents)
+        # Get coefficient table with more detail
+        coef_table = EstimationResults.get_coefficient_table()
+        if coef_table and coef_table.get('coef'):  # Check if we have coefficients
+            output.append("\n[COEFFICIENT TABLE]")
+            output.append("Variable | Coef. | Std.Err. | t/z | P>|t/z| | [95% Conf. Interval]")
+            output.append("-" * 80)
             
-    except:
-        pass
-
-    # Add comprehensive r() results
-    r_results = EstimationResults.get_r_results()
-    if r_results:
-        output.append("\n[R RESULTS]")
-        output.append("Summary Statistics and Test Results:")
+            for i, name in enumerate(coef_table['names']):
+                try:
+                    row = (f"{name:12} | {coef_table['coef'][i]:10.6f} | "  # More decimal places
+                        f"{coef_table['se'][i]:10.6f} | {coef_table['t_stat'][i]:8.4f} | "  # More decimal places
+                        f"{coef_table['p_value'][i]:8.6f} | [{coef_table['ci_lower'][i]:10.6f}, "  # More decimal places
+                        f"{coef_table['ci_upper'][i]:10.6f}]")  # More decimal places
+                    output.append(row)
+                except:
+                    continue
         
-        # Sort r() results by name for better organization
-        for name in sorted(r_results.keys()):
-            value = r_results[name]
-            if isinstance(value, (int, float)):
+        # Get ALL matrices - don't limit to just names and dimensions
+        try:
+            # First try standard matrices
+            matrix_names = [
+                'e(b)', 'e(V)', 'e(ilog)', 'e(gradient)', 'e(S)', 'r(table)',
+                # Add more potential matrices
+                'e(Sigma)', 'r(R)', 'r(eigenvals)', 'r(eigenvectors)', 
+                'r(loadings)', 'r(stats)'
+            ]
+            
+            matrices = []
+            matrix_contents = []
+            
+            for m in matrix_names:
+                try:
+                    mat = Matrix.get(m)
+                    if mat is not None and hasattr(mat, 'shape'):
+                        # Add matrix dimensions
+                        matrices.append(f"{m}: {mat.shape[0]}x{mat.shape[1]}")
+                        
+                        # For smaller matrices, also include full contents
+                        if mat.shape[0] * mat.shape[1] <= 100:  # Increased size threshold
+                            content = [f"{m} contents:"]
+                            # Try to get column names
+                            try:
+                                col_names = Matrix.getColNames(m)
+                                if col_names:
+                                    content.append("Column names: " + ", ".join(col_names))
+                            except:
+                                pass
+                            
+                            # Add matrix values
+                            for i in range(min(mat.shape[0], 10)):  # Show up to 10 rows
+                                row_vals = []
+                                for j in range(min(mat.shape[1], 10)):  # Show up to 10 columns
+                                    val = mat[i][j]
+                                    if val is not None:
+                                        row_vals.append(f"{val:.6g}")  # Format numbers
+                                    else:
+                                        row_vals.append(".")
+                                content.append(f"Row {i+1}: [{', '.join(row_vals)}]")
+                            
+                            matrix_contents.extend(content)
+                except:
+                    continue
+            
+            if matrices:
+                output.append("\n[MATRICES]")
+                output.extend(matrices)
+            
+            if matrix_contents:
+                output.append("\n[MATRIX CONTENTS]")
+                output.extend(matrix_contents)
+                
+        except:
+            pass
+
+        # Add comprehensive r() results
+        r_results = EstimationResults.get_r_results()
+        if r_results:
+            output.append("\n[R RESULTS]")
+            output.append("Summary Statistics and Test Results:")
+            
+            # Sort r() results by name for better organization
+            for name in sorted(r_results.keys()):
+                value = r_results[name]
+                if isinstance(value, (int, float)):
+                    output.append(f"{name}: {value:.8g}")  # More decimal places
+                else:
+                    output.append(f"{name}: {value}")
+        
+        # Add survey results
+        svy_results = EstimationResults.get_svy_results()
+        if svy_results:
+            output.append("\n[SURVEY RESULTS]")
+            for name, value in svy_results.items():
                 output.append(f"{name}: {value:.8g}")  # More decimal places
-            else:
-                output.append(f"{name}: {value}")
-    
-    # Add survey results
-    svy_results = EstimationResults.get_svy_results()
-    if svy_results:
-        output.append("\n[SURVEY RESULTS]")
-        for name, value in svy_results.items():
-            output.append(f"{name}: {value:.8g}")  # More decimal places
-    
-    # Add test results
-    test_results = EstimationResults.get_test_results()
-    if test_results:
-        output.append("\n[TEST RESULTS]")
-        for name, value in test_results.items():
-            output.append(f"{name}: {value:.8g}")  # More decimal places
-    
-    return "\n".join(output)
+        
+        # Add test results
+        test_results = EstimationResults.get_test_results()
+        if test_results:
+            output.append("\n[TEST RESULTS]")
+            for name, value in test_results.items():
+                output.append(f"{name}: {value:.8g}")  # More decimal places
+        
+        return "\n".join(output)
 
     @staticmethod
     def get_r_results() -> Dict[str, Any]:
