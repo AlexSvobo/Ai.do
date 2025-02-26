@@ -1,4 +1,4 @@
-from aido.aido import (
+from aido import (
     AiDoAssistant,
     Config,
     ProviderFactory,

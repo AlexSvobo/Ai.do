@@ -27,7 +27,7 @@ program define aido
 
     // Define configuration and package paths
     local config_path "`c(sysdir_plus)'/a/aido.config"
-    local package_path "`c(sysdir_plus)'/a"
+    local package_path "`c(sysdir_plus)'/py"
 
     // Verify configuration exists
     capture confirm file "`config_path'"
@@ -135,7 +135,7 @@ program define aido
 
     // Call Python
     capture noisily {
-        python: import sys; sys.path.insert(0, r"`package_path'"); from aido.cli import process_stata_query; process_stata_query(r"`config_path'", "`finalquery'", "`varinfo'", r"`vartypes'", `=_N')
+        python: import sys; sys.path.insert(0, r"`package_path'"); from cli import process_stata_query; process_stata_query(r"`config_path'", "`finalquery'", "`varinfo'", r"`vartypes'", `=_N')
     }
     if _rc {
         di _newline as error "╭{hline 48}╮"
