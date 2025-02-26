@@ -1039,8 +1039,44 @@ class ContextManager:
             self.chat_history.pop(0)
 
     def update_command_history(self):
-        """Update command history from Stata's actual command history"""
-        self.command_history = EstimationResults.get_command_history()
+        """Update command history using direct command execution"""
+        try:
+            from sfi import Data
+            # Execute the history command and capture output
+            history_output = Data.execCommand("history", True)
+            
+            if history_output:
+                commands = []
+                lines = history_output.split("\n")
+                for line in lines:
+                    # History output typically shows line numbers like "  1. command"
+                    if "." in line:
+                        parts = line.split(".", 1)
+                        if len(parts) > 1:
+                            cmd = parts[1].strip()
+                            if cmd:
+                                commands.append(cmd)
+                
+                # Update history with parsed commands (most recent first)
+                self.command_history = commands[:MAX_HISTORY_ITEMS]
+            
+        except Exception as e:
+            # Fallback to existing method if this fails
+            try:
+                from sfi import Macro
+                history = []
+                for i in range(20):  # Try up to 20 recent commands
+                    try:
+                        cmd = Macro.getGlobal(f"c(cmdline{i})")
+                        if cmd and cmd.strip():
+                            history.append(cmd.strip())
+                    except:
+                        continue
+                
+                self.command_history = history[:MAX_HISTORY_ITEMS]
+            except:
+                # Keep existing history if all else fails
+                pass
 
 # Core AI.do Assistant Class
 class AiDoAssistant:
@@ -1181,4 +1217,3 @@ class ProviderFactory:
             return GeminiProvider(api_key=provider_config["api_key"])
         else:
             raise ValueError(f"Unknown provider: {provider_name}")
-`
