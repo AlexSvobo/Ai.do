@@ -6,19 +6,15 @@ d Support: https://github.com/alexsvobo/Ai.do/issues
 d
 d Requires: Stata 16.0+
 d         Python 3.8+
-d         aiohttp >= 3.8.0
 d
 d Additional Requirements:
 d - API key from either:
 d   * Google Gemini (recommended)
 d   * Hugging Face
 d
-d Additional Installation Required:
-d 1. Python module installation will be handled during package setup
-d 2. Run in terminal: pip install aiohttp>=3.8.0
-d
 d After installation, configure API key:
 d . aido_config, provider(gemini) apikey("YOUR-KEY")
+d . aido_config, provider(huggingface) apikey("YOUR-KEY") modelid("Qwen/Qwen2.5-Coder-32B")
 d
 d Distribution-Date: 20250224
 d

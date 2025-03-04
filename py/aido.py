@@ -8,12 +8,15 @@ A bridge between Stata and Large Language Models
 
 import os
 import json
-import asyncio
 import logging
 from typing import Dict, Optional, List, Any, TypedDict
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import platform
+import urllib.request
+import urllib.error
+import urllib.parse
+import json
 
 def get_stata_path() -> str:
     """Get Stata utilities path based on OS and common install locations"""
@@ -65,11 +68,11 @@ MAX_HISTORY_ITEMS = 5
 
 class ModelProvider(ABC):
     @abstractmethod
-    async def generate_response(self, prompt: str, context: Dict[str, Any]) -> str:
+    def generate_response(self, prompt: str, context: Dict[str, Any]) -> str:
         pass
 
     @abstractmethod
-    async def validate_connection(self) -> bool:
+    def validate_connection(self) -> bool:
         pass
 
 class HuggingFaceProvider(ModelProvider):
@@ -90,18 +93,16 @@ class HuggingFaceProvider(ModelProvider):
             }
         }
 
-    async def validate_connection(self) -> bool:
+    def validate_connection(self) -> bool:
         """Validate the API connection by trying a simple query"""
         try:
-            test_response = await self.generate_response("Test connection", {})
+            test_response = self.generate_response("Test connection", {})
             return bool(test_response)
         except Exception as e:
             logger.warning(f"Connection validation failed: {e}")
             return False
         
-    async def generate_response(self, prompt: str, context: Dict[str, Any]) -> str:
-        import aiohttp
-        
+    def generate_response(self, prompt: str, context: Dict[str, Any]) -> str:
         for provider, config in self.inference_endpoints.items():
             try:
                 headers = {
@@ -132,41 +133,46 @@ class HuggingFaceProvider(ModelProvider):
                         }
                     }
                 
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(config["url"], headers=headers, json=payload) as response:
-                        if response.status == 200:
-                            result = await response.json()
-                            
-                            # Extract response text based on format
-                            response_text = ""
-                            if config["is_chat"]:
-                                if "choices" in result:
-                                    response_text = result["choices"][0]["message"]["content"]
-                            else:
-                                if isinstance(result, list) and result:
-                                    response_text = result[0].get("generated_text", "")
-                            
-                            # Clean up and format response
-                            if response_text:
-                                # Remove common artifacts
-                                response_text = response_text.replace("<|endoftext|>", "")
-                                response_text = response_text.strip()
-                                
-                                # Format code blocks for Stata
-                                lines = []
+                # Use urllib from standard library
+                req = urllib.request.Request(
+                    config["url"],
+                    data=json.dumps(payload).encode(),
+                    headers=headers
+                )
+                
+                with urllib.request.urlopen(req) as response:
+                    result = json.loads(response.read().decode())
+                    
+                    # Extract response text based on format
+                    response_text = ""
+                    if config["is_chat"]:
+                        if "choices" in result:
+                            response_text = result["choices"][0]["message"]["content"]
+                    else:
+                        if isinstance(result, list) and result:
+                            response_text = result[0].get("generated_text", "")
+                    
+                    # Clean up and format response
+                    if response_text:
+                        # Remove common artifacts
+                        response_text = response_text.replace("<|endoftext|>", "")
+                        response_text = response_text.strip()
+                        
+                        # Format code blocks for Stata
+                        lines = []
+                        in_code_block = False
+                        for line in response_text.split("\n"):
+                            if "```stata" in line:
+                                in_code_block = True
+                                lines.append(". // Code block start")
+                            elif "```" in line and in_code_block:
                                 in_code_block = False
-                                for line in response_text.split("\n"):
-                                    if "```stata" in line:
-                                        in_code_block = True
-                                        lines.append(". // Code block start")
-                                    elif "```" in line and in_code_block:
-                                        in_code_block = False
-                                        lines.append(". // Code block end")
-                                    else:
-                                        lines.append(line)
-                                
-                                return "\n".join(lines)
-                            
+                                lines.append(". // Code block end")
+                            else:
+                                lines.append(line)
+                        
+                        return "\n".join(lines)
+                    
             except Exception as e:
                 logger.warning(f"Failed with {provider} endpoint: {e}")
                 continue
@@ -178,9 +184,7 @@ class GeminiProvider(ModelProvider):
         self.api_key = api_key
         self.api_url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent"
         
-    async def generate_response(self, prompt: str, context: Dict[str, Any]) -> str:
-        import aiohttp
-        
+    def generate_response(self, prompt: str, context: Dict[str, Any]) -> str:
         headers = {
             "Content-Type": "application/json"
         }
@@ -196,26 +200,29 @@ class GeminiProvider(ModelProvider):
         url = f"{self.api_url}?key={self.api_key}"
         
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, headers=headers, json=payload) as response:
-                    if response.status != 200:
-                        raise Exception(f"API call failed with status {response.status}")
-                    
-                    result = await response.json()
-                    
-                    if "error" in result:
-                        raise Exception(f"API error: {result['error']}")
-                    
-                    return result["candidates"][0]["content"]["parts"][0]["text"]
-                    
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode(),
+                headers=headers
+            )
+            
+            with urllib.request.urlopen(req) as response:
+                result = json.loads(response.read().decode())
+                
+                if "error" in result:
+                    raise Exception(f"API error: {result['error']}")
+                
+                return result["candidates"][0]["content"]["parts"][0]["text"]
+                
         except Exception as e:
             logger.error(f"Gemini API error: {e}")
             raise
 
-    async def validate_connection(self) -> bool:
+    def validate_connection(self) -> bool:
         try:
-            # TODO: Implement connection test
-            return True
+            # Simple test request
+            test_response = self.generate_response("Test connection", {})
+            return bool(test_response)
         except Exception:
             return False
 
@@ -306,7 +313,7 @@ class ContextManager:
         self.estimation_results: Optional[Dict[str, Any]] = None
         self.chat_history: List[Dict[str, str]] = []  # Add chat history storage
         
-    async def update_context(self, stata_output: str):
+    def update_context(self, stata_output: str):
         self.dataset_context = DatasetContext.from_stata_describe(stata_output)
     
     def add_command(self, command: str):
@@ -386,7 +393,7 @@ class AiDoAssistant:
         self.provider = provider
         self.context_manager = ContextManager()
         
-    async def process_query(self, query: str) -> str:
+    def process_query(self, query: str) -> str:
         """Process query using comprehensive Stata results"""
         # Add user query to chat history
         self.context_manager.add_chat_message("user", query)
@@ -411,7 +418,7 @@ class AiDoAssistant:
         )
         
         # Get AI response
-        response = await self.provider.generate_response(formatted_prompt, context)
+        response = self.provider.generate_response(formatted_prompt, context)
         
         # Add AI response to chat history
         self.context_manager.add_chat_message("assistant", response)
@@ -468,8 +475,8 @@ class AiDoAssistant:
         Include relevant Stata code examples when appropriate.
         """
     
-    async def update_dataset_context(self, stata_output: str):
-        await self.context_manager.update_context(stata_output)
+    def update_dataset_context(self, stata_output: str):
+        self.context_manager.update_context(stata_output)
 
 # Configuration Management
 logger = logging.getLogger(__name__)
