@@ -40,9 +40,9 @@ Look for the path next to "PLUS:". It's typically:
 - Linux: `~/ado/plus`
 
 3. **Install AI.do Assistant**:
-   1. Download [Ai.do.zip](https://github.com/alexsvobo/Ai.do/archive/refs/heads/main.zip)
-   2. Extract the ZIP contents
-   3. Copy to the `a` folder to your Stata PLUS directory from step 2
+```stata
+net install aido, from("https://raw.githubusercontent.com/alexsvobo/Ai.do/main/") replace
+```
 
 4. **Install Python package**:
    - Windows: Press Windows+R, type "cmd", press Enter, then type:
