@@ -24,7 +24,6 @@ f aido.sthlp
 f aido.dlg
 f stata.toc
 f LICENSE
-f requirements.txt
 f README.md
 f py/__init__.py
 f py/aido.py

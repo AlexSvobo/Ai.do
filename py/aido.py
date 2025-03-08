@@ -426,7 +426,7 @@ class AiDoAssistant:
         return response
 
     def _format_variables(self, context: Dict[str, Any]) -> str:
-        """Optimized variable formatting with list comprehension"""
+        """Optimized variable formatting with list comprehension and missing value handling"""
         metadata = context.get("dataset", {}).get("metadata", {}).get("columns", {})
         
         variables = [
@@ -434,17 +434,62 @@ class AiDoAssistant:
             + (f": {info['label']}" if info['label'] else "")
             + (f" [Statistics: {', '.join(f'{k}={v:.2f}' for k, v in info['statistics'].items() if v is not None)}]" if info['statistics'] else "")
             + (f" [Labels: {', '.join(f'{k}={v}' for k, v in info['value_labels'].items())}]" if info['value_labels'] else "")
+            + (f" [Missing: {info['statistics'].get('missing', 0)} observations]" if info['statistics'].get('missing', 0) > 0 else "")
             for name, info in metadata.items()
         ]
 
+        # Count variables with value labels and missing values
+        vars_with_value_labels = sum(1 for info in metadata.values() if info['value_labels'])
+        vars_with_missing = sum(1 for info in metadata.values() if info['statistics'].get('missing', 0) > 0)
+        total_missing = sum(info['statistics'].get('missing', 0) for info in metadata.values())
+        
+        # Calculate statistics for summary
+        total_vars = len(metadata)
+        numeric_vars = sum(1 for info in metadata.values() if info['type'] not in ['str', 'strL'])
+        string_vars = sum(1 for info in metadata.values() if info['type'].startswith('str'))
+        vars_with_labels = sum(1 for info in metadata.values() if info['label'])
+        
         summary = f"""
         Dataset Summary:
-        - Total Variables: {len(metadata)}
-        - Numeric Variables: {sum(1 for info in metadata.values() if info['type'] not in ['str', 'strL'])}
-        - String Variables: {sum(1 for info in metadata.values() if info['type'].startswith('str'))}
-        - Variables with Labels: {sum(1 for info in metadata.values() if info['label'])}
-        - Variables with Value Labels: {sum(1 for info in metadata.values() if info['value_labels'])}
+        - Total Variables: {total_vars}
+        - Numeric Variables: {numeric_vars}
+        - String Variables: {string_vars}
+        - Variables with Labels: {vars_with_labels}
+        - Variables with Value Labels: {vars_with_value_labels}
+        - Variables with Missing Values: {vars_with_missing}
+        - Total Missing Values: {total_missing}
         """
+        
+        # Add explicit notes about value labels and missing values
+        if vars_with_value_labels == 0:
+            summary += "\n    Note: No value labels are currently defined. This means that numeric variables represent their values directly."
+        
+        # Get missing value patterns from sample data
+        missing_patterns = context.get("dataset", {}).get("metadata", {}).get("sample_data", {}).get("missing_patterns", {})
+        if missing_patterns:
+            summary += "\n    Missing Value Information:"
+            for var, patterns in missing_patterns.items():
+                pattern_str = ", ".join(f"{code}({count})" for code, count in patterns.items())
+                summary += f"\n    - {var}: {pattern_str}"
+        
+        # Add Stata-specific missing value explanation
+        if vars_with_missing > 0:
+            summary += "\n\n    Note about Stata missing values:"
+            summary += "\n    - '.' represents standard missing value"
+            summary += "\n    - '.a' through '.z' represent extended missing values"
+            summary += "\n    - Missing values are ordered: . < .a < .b < ... < .z"
+        
+        # Add sample data information if available
+        sample_data = context.get("dataset", {}).get("metadata", {}).get("sample_data", {}).get("rows", [])
+        if sample_data:
+            summary += f"\n\n    Sample Data: {len(sample_data)} rows available for context"
+            
+            # Include first row as an example
+            if sample_data[0]:
+                first_row = {k: v for k, v in list(sample_data[0].items())[:5]}  # Limit to first 5 columns
+                summary += f"\n    Example (first row): {json.dumps(first_row, default=str)}"
+                if len(sample_data[0]) > 5:
+                    summary += " ..."
         
         return "\n".join(variables) + "\n" + summary
 

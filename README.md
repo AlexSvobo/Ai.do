@@ -6,55 +6,35 @@ An AI-powered assistant for Stata.
 [![Open Source](https://img.shields.io/badge/Open%20Source-Yes-green.svg)]()
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![Stata 16+](https://img.shields.io/badge/Stata-16%2B-blue.svg)](https://www.stata.com)
-[![Requires aiohttp](https://img.shields.io/badge/Requires-aiohttp-brightgreen.svg)](requirements.txt)
+[![No External Dependencies](https://img.shields.io/badge/No%20External%20Dependencies-✓-brightgreen.svg)]()
 [![GitHub Issues](https://img.shields.io/github/issues/alexsvobo/Ai.do)](https://github.com/alexsvobo/Ai.do/issues)
 
 ## Requirements
 
 - Stata 16.0 or later
-- Python 3.8 or later (we'll help you install it)
+- Python 3.8 or later
 - API key from one of these providers:
   - [Google Gemini (recommended)](https://makersuite.google.com/app/apikey)
   - [Hugging Face](https://huggingface.co/settings/tokens)
 
 ## Installation
 
-1. **Install Python** (if not already installed):
-   - Download Python from [python.org](https://www.python.org/downloads/)
-   - During installation:
-     - ✓ Check "Add Python to PATH"
-     - ✓ Check "Install pip"
-   - Verify installation by opening Stata and typing:
+1. **Check if Python is working** in your Stata installation:
 ```stata
 python query
 ```
    If you see a Python version number, you're good to go!
 
-2. **Find your Stata PLUS directory**:
-```stata
-sysdir
-```
-Look for the path next to "PLUS:". It's typically:
-- Windows: `c:/users/username/ado/plus`
-- Mac: `/Users/username/Library/Application Support/Stata/ado/plus`
-- Linux: `~/ado/plus`
+2. **If Python isn't working**, you may need to:
+   - Install Python from [python.org](https://python.org)
+   - During installation, check "Add Python to PATH"
 
 3. **Install AI.do Assistant**:
 ```stata
 net install aido, from("https://raw.githubusercontent.com/alexsvobo/Ai.do/main/") replace
 ```
 
-4. **Install Python package**:
-   - Windows: Press Windows+R, type "cmd", press Enter, then type:
-```cmd
-pip install aiohttp
-```
-   - Mac/Linux: Open Terminal and type:
-```bash
-pip3 install aiohttp
-```
-
-5. **Configure your AI provider** in Stata:
+4. **Configure your AI provider** in Stata:
 ```stata
 // For Google Gemini (recommended):
 aido_config, provider(gemini) apikey("YOUR-API-KEY")
@@ -82,9 +62,19 @@ db aido
 
 ## Features
 
-- Database context
-- Session results context (soon)
-- Multiple AI provider support
+- **Database Context**: AI.do automatically analyzes your loaded dataset, including variables, data types, statistics, and missing values, enabling contextually relevant answers about your specific data.
+
+- **Results Context Awareness**: Captures both r-class (return values) and e-class (estimation) results from your recent Stata commands, allowing the AI to reference your latest analyses in its responses.
+
+- **Chat Session Memory**: Maintains conversation history within your Stata session, enabling follow-up questions and continuous dialogue without repeating context.
+
+- **Multiple AI Provider Support**: 
+  - Google Gemini (recommended for now)
+  - Hugging Face models
+
+- **Progress Visualization**: Real-time progress indicators show preprocessing status and API connection activity.
+
+- **Dialog Box Interface**: Simple graphical interface via `db aido` for those who prefer point-and-click interaction.
 
 ## Support
 
